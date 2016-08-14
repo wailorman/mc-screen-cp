@@ -1,0 +1,136 @@
+#!/bin/bash
+
+# Minecraft screen control panel
+#
+# Version 1.2.4 (20.01.2013)
+# by wailorman <wailorman@gmail.com>
+
+# Config directory
+CONFIG_DIR="/etc/mc-screen-cp/"
+
+#      == Startup ==
+# $1 - Server name
+# $2 - Action
+
+
+
+	if [ $1 = "new-config" ] 
+	then
+		wget -c "http://dl.dropbox.com/u/13248852/mc-screen-cp/server1.cfg" -O ${CONFIG_DIR}${2}.cfg
+		chmod 755 ${CONFIG_DIR}${2}.cfg
+		
+		wget -c "http://dl.dropbox.com/u/13248852/mc-screen-cp/server1.power" -O ${CONFIG_DIR}${2}.power
+		chmod 777 ${CONFIG_DIR}${2}.power
+		
+		exit
+	fi
+	
+	if [ $1 = "remove-config" ] 
+	then
+		rm ${CONFIG_DIR}${2}.power
+		rm ${CONFIG_DIR}${2}.cfg
+		
+		exit
+	fi
+
+
+
+# Check existence of requested server
+if [ -f ${CONFIG_DIR}${1}.cfg ]
+then
+	echo ""
+else
+	# If hasn't found, returns ...
+	echo "Can't find configuration file ${CONFIG_DIR}${1}.cfg"
+	exit
+fi
+
+
+	if [ $2 = "start" ]
+	then
+		# Server starting
+		
+		# Loading configs
+		source ${CONFIG_DIR}${1}.cfg
+		
+		#1. Hard stopping old server (which was ran before). To prevent Screen names conflicts
+			screen -S "${SCREEN_NAME}" -X kill >/dev/null 2>&1
+		
+		#2. New server starting
+
+			# Creating new Screen session
+			screen -S "${SCREEN_NAME}" -d -m
+
+			# Moving to server directory
+			screen -S "${SCREEN_NAME}" -X -p 0 stuff $"cd ${SERVER_DIR}"
+			screen -S "${SCREEN_NAME}" -X -p 0 stuff $'\r'
+			    # Да, костыль. И что? Зато работает!
+			
+			# Run server.jar
+			screen -S "${SCREEN_NAME}" -X -p 0 stuff $"${DIR_OF_SCRIPT}mc-screen-cp ${1} run"
+			screen -S "${SCREEN_NAME}" -X -p 0 stuff $'\r'
+		
+	fi
+
+	if [ $2 = "restart" ]
+	then
+		# Restarting server
+		
+		source ${CONFIG_DIR}${1}.cfg
+		
+		screen -S "${SCREEN_NAME}" -X -p 0 stuff $'stop\r'
+		
+	fi
+
+	if [ $2 = "stop" ]
+	then
+		#stopping server
+		
+		source ${CONFIG_DIR}${1}.cfg		
+		echo "1" > "${CONFIG_DIR}${1}.power"
+		
+		screen -S "${SCREEN_NAME}" -X -p 0 stuff $'stop\r'
+		
+	fi
+	
+	if [ $2 = "run" ]
+	then # Do not use this action in CLI!
+
+		# Main server starting script
+		
+		
+		source ${CONFIG_DIR}${1}.cfg
+
+		# Starting Minecraft server in loop to prevent crash caused downtime
+
+		while true
+		do
+
+            # STOPING_SERVER variable stores the requested state of server
+            # If 0 -- keep server up
+            # If 1 -- stop server. Sounds for script like "please, do not run server again. It's not crash"
+
+			if [ $STOPING_SERVER = "1" ] 
+			then
+
+				# If we received STOP action, we need to stop starting server in loop
+
+				break
+			fi
+
+			cd ${SERVER_DIR}
+			java -Xmx${SERVER_MEM} -Xms${SERVER_MEM} -jar ${SERVER_DIR}${SERVER_JAR} nogui
+
+            read STOPING_SERVER < "${CONFIG_DIR}${1}.power"
+
+		done
+				
+	fi
+	
+	if [ $2 = "console" ] 
+	then 
+		source ${CONFIG_DIR}${1}.cfg
+		
+	 	screen -r "$SCREEN_NAME"
+		
+	fi
